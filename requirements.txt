@@ -1,0 +1,5 @@
+# OpShin - Python smart contract language for Cardano
+opshin>=0.21.0
+
+# PyCardano - For building transactions (optional, for off-chain code)
+pycardano>=0.10.0
