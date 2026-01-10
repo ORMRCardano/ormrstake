@@ -1,6 +1,6 @@
 # OpShin Staking Contracts - PlutusV3 Examples
 
-Production-ready Cardano smart contracts written in OpShin (Python) for token staking pools. These contracts power [OrmrStake](https://ormrstake.io).
+Production-ready* Cardano smart contracts written in OpShin (Python) for token staking pools. These contracts power [OrmrStake](https://ormrstake.io).
 
 ## Overview
 
@@ -145,3 +145,7 @@ MIT License - See LICENSE file for details.
 - [CIP-68 Specification](https://cips.cardano.org/cip/CIP-0068/)
 - [PlutusV3 Documentation](https://plutus.readthedocs.io/)
 - [OrmrStake Platform](https://ormrstake.io)
+
+## Notes
+
+* Production-ready means that you can use it and it works. However, it has not been professionally audited, so its use at your own risk. 
