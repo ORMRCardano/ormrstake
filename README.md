@@ -14,7 +14,7 @@ This repository contains a complete staking platform implementation using:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Platform Authority NFT                         │
+│                   Platform Authority NFT                        │
 │  - One-shot NFT minted during platform deployment               │
 │  - Controls who can create pools (pool_creator_pkh)             │
 │  - Platform admin can update configuration                      │
@@ -24,29 +24,29 @@ This repository contains a complete staking platform implementation using:
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Pool Validator                           │
-│  - Holds pool configuration (PoolDatum)                        │
+│  - Holds pool configuration (PoolDatum)                         │
 │  - Manages treasury funds                                       │
-│  - Contains Pool NFT proving legitimacy                        │
-│  - Unstake/Claim require staking validator authorization       │
+│  - Contains Pool NFT proving legitimacy                         │
+│  - Unstake/Claim require staking validator authorization        │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ references
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Staking Validator                          │
-│  - Holds user positions (UserPositionDatum)                    │
-│  - Manages stake/unstake/claim operations                      │
-│  - Reads pool config from reference inputs                     │
-│  - Time manipulation protected (10min max validity window)     │
+│  - Holds user positions (UserPositionDatum)                     │
+│  - Manages stake/unstake/claim operations                       │ 
+│  - Reads pool config from reference inputs                      │
+│  - Time manipulation protected (10min max validity window)      │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ mints/burns
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Position NFT Policy                          │
-│  - Mints CIP-68 position NFTs on registration                  │
-│  - Burns NFTs on full withdrawal                               │
-│  - Reference NFT (100) stays at validator                      │
+│  - Mints CIP-68 position NFTs on registration                   │
+│  - Burns NFTs on full withdrawal                                │
+│  - Reference NFT (100) stays at validator                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
