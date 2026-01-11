@@ -165,6 +165,20 @@ def nft_burned(tx: TxInfo, policy: bytes, name: bytes) -> bool:
     return False
 
 
+def staking_validator_spent(tx: TxInfo, staking_validator_hash: bytes) -> bool:
+    """
+    Check if staking validator is being spent in same transaction.
+    This ensures Unstake/Claim operations are authorized by the staking validator.
+    Prevents unauthorized draining of pool funds.
+    """
+    for inp in tx.inputs:
+        cred = inp.resolved.address.payment_credential
+        if isinstance(cred, ScriptCredential):
+            if cred.credential_hash == staking_validator_hash:
+                return True
+    return False
+
+
 def find_own_input(tx: TxInfo, ref: TxOutRef) -> TxOut:
     """Find the input being spent."""
     for i in tx.inputs:
@@ -339,6 +353,10 @@ def validator(ctx: ScriptContext) -> None:
     # UNSTAKE
     # ==========================================================================
     elif isinstance(redeemer, Unstake):
+        # CRITICAL: Staking validator must be spent to authorize unstake
+        # This prevents unauthorized draining of stake tokens from pool
+        assert staking_validator_spent(tx, datum.staking_validator_hash), "Staking validator must authorize unstake"
+
         assert redeemer.amount > 0, "Amount must be positive"
         assert redeemer.amount <= datum.total_staked, "Exceeds total staked"
 
@@ -362,6 +380,10 @@ def validator(ctx: ScriptContext) -> None:
     # CLAIM
     # ==========================================================================
     elif isinstance(redeemer, Claim):
+        # CRITICAL: Staking validator must be spent to authorize claim
+        # This prevents unauthorized draining of reward tokens from pool
+        assert staking_validator_spent(tx, datum.staking_validator_hash), "Staking validator must authorize claim"
+
         # Find continuing output
         cont = find_continuing_output(tx, own_addr, datum.pool_nft_policy, datum.pool_nft_name)
         cont_datum_raw = cont.datum

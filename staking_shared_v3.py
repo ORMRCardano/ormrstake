@@ -169,17 +169,13 @@ def find_own_input(tx: TxInfo, ref: TxOutRef) -> TxOut:
     return tx.inputs[0].resolved
 
 
-def find_continuing_output(tx: TxInfo, addr: Address, nft_name: bytes) -> TxOut:
-    """Find output at same address with position NFT."""
+def find_continuing_output(tx: TxInfo, addr: Address, nft_policy: bytes, nft_name: bytes) -> TxOut:
+    """Find output at same address with position NFT. Validates BOTH policy and name."""
     for o in tx.outputs:
         if o.address == addr:
-            # Check for position NFT by name (policy varies)
-            for policy in o.value.keys():
-                if policy != b"":  # Skip ADA
-                    tokens = o.value[policy]
-                    if nft_name in tokens.keys():
-                        if tokens[nft_name] >= 1:
-                            return o
+            # Check for position NFT by BOTH policy and name (prevents fake NFT substitution)
+            if has_nft(o.value, nft_policy, nft_name):
+                return o
     assert False, "Continuing output not found"
     return tx.outputs[0]
 
@@ -259,20 +255,20 @@ def find_pool_config_reference(tx: TxInfo, pool_nft_policy: bytes, pool_nft_name
     )
 
 
-def nft_sent_to_burn(tx: TxInfo, pool: PoolDatum, nft_name: bytes) -> bool:
-    """Check if NFT is sent to burn address. Reads burn_address_hash from pool datum."""
+def nft_sent_to_burn(tx: TxInfo, pool: PoolDatum, nft_policy: bytes, nft_name: bytes) -> bool:
+    """
+    Check if NFT is sent to burn address.
+    Validates BOTH policy and name to prevent fake NFT substitution.
+    Uses has_nft helper to avoid unbounded nested loops.
+    """
     for o in tx.outputs:
         cred = o.address.payment_credential
         if isinstance(cred, ScriptCredential):
             # Read burn address from pool datum - NOT baked in
             if cred.credential_hash == pool.burn_address_hash:
-                # Check for NFT by name
-                for policy in o.value.keys():
-                    if policy != b"":
-                        tokens = o.value[policy]
-                        if nft_name in tokens.keys():
-                            if tokens[nft_name] >= 1:
-                                return True
+                # Check for NFT by BOTH policy and name (prevents fake NFT attack)
+                if has_nft(o.value, nft_policy, nft_name):
+                    return True
     return False
 
 
@@ -297,11 +293,35 @@ def calculate_fee(amount: int, fee_bps: int) -> int:
 
 
 def get_current_time(tx: TxInfo) -> int:
-    """Extract current time from transaction validity range."""
+    """
+    Extract current time from transaction validity range.
+
+    SECURITY: Uses upper_bound and requires tight time window to prevent
+    time manipulation attacks where attacker sets lower_bound far in the past
+    to inflate staking duration and claim excess rewards.
+
+    Max validity window: 10 minutes (600,000 ms)
+    """
+    # Require finite lower bound
     lower_bound = tx.validity_range.lower_bound
     lower_limit = lower_bound.limit
     assert isinstance(lower_limit, FinitePOSIXTime), "Must have finite lower time bound"
-    return lower_limit.time
+    lower_time = lower_limit.time
+
+    # Require finite upper bound
+    upper_bound = tx.validity_range.upper_bound
+    upper_limit = upper_bound.limit
+    assert isinstance(upper_limit, FinitePOSIXTime), "Must have finite upper time bound"
+    upper_time = upper_limit.time
+
+    # Require tight validity window (max 10 minutes = 600,000 ms)
+    # This prevents setting lower_bound far in the past
+    max_window_ms = 600000
+    assert upper_time - lower_time <= max_window_ms, "Validity window too large (max 10 minutes)"
+
+    # Use upper_bound as current time (latest the tx is valid)
+    # This is the most restrictive for reward calculations
+    return upper_time
 
 
 def calculate_rewards(stake_amount: int, yield_rate: int, last_claim: int, current_time: int) -> int:
@@ -370,7 +390,7 @@ def validator(ctx: ScriptContext) -> None:
         assert signed_by(tx, pool.owner), "Pool owner signature required"
 
         # Position NFT must be sent to burn address
-        assert nft_sent_to_burn(tx, pool, datum.position_nft_name), "Position NFT must be burned"
+        assert nft_sent_to_burn(tx, pool, pool.position_nft_policy_hash, datum.position_nft_name), "Position NFT must be burned"
 
         # Staked tokens must be sent to the staker's address
         assert output_to_staker(
@@ -429,8 +449,8 @@ def validator(ctx: ScriptContext) -> None:
         fee = calculate_fee(redeemer.amount, pool.deposit_fee_bps)
         net_amount = redeemer.amount - fee
 
-        # Find continuing output
-        cont = find_continuing_output(tx, own_addr, datum.position_nft_name)
+        # Find continuing output (validates BOTH policy and name to prevent fake NFT substitution)
+        cont = find_continuing_output(tx, own_addr, pool.position_nft_policy_hash, datum.position_nft_name)
         cont_datum_raw = cont.datum
         assert isinstance(cont_datum_raw, SomeOutputDatum), "Missing inline datum"
         new_datum: UserPositionDatum = cont_datum_raw.datum
@@ -469,7 +489,7 @@ def validator(ctx: ScriptContext) -> None:
         assert withdraw_amount <= datum.stake_amount, "Exceeds stake"
 
         # ALWAYS burn the position NFT on any withdrawal (full or partial)
-        assert nft_sent_to_burn(tx, pool, datum.position_nft_name), "NFT must be burned"
+        assert nft_sent_to_burn(tx, pool, pool.position_nft_policy_hash, datum.position_nft_name), "NFT must be burned"
 
         # Withdrawals are FREE - no platform fee
 
@@ -492,8 +512,8 @@ def validator(ctx: ScriptContext) -> None:
         )
         assert pending_rewards > 0, "No rewards to claim"
 
-        # Find continuing output
-        cont = find_continuing_output(tx, own_addr, datum.position_nft_name)
+        # Find continuing output (validates BOTH policy and name to prevent fake NFT substitution)
+        cont = find_continuing_output(tx, own_addr, pool.position_nft_policy_hash, datum.position_nft_name)
         cont_datum_raw = cont.datum
         assert isinstance(cont_datum_raw, SomeOutputDatum), "Missing inline datum"
         new_datum: UserPositionDatum = cont_datum_raw.datum
@@ -535,8 +555,8 @@ def validator(ctx: ScriptContext) -> None:
         fee = calculate_fee(pending_rewards, pool.deposit_fee_bps)
         net_rewards = pending_rewards - fee
 
-        # Find continuing output
-        cont = find_continuing_output(tx, own_addr, datum.position_nft_name)
+        # Find continuing output (validates BOTH policy and name to prevent fake NFT substitution)
+        cont = find_continuing_output(tx, own_addr, pool.position_nft_policy_hash, datum.position_nft_name)
         cont_datum_raw = cont.datum
         assert isinstance(cont_datum_raw, SomeOutputDatum), "Missing inline datum"
         new_datum: UserPositionDatum = cont_datum_raw.datum

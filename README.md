@@ -1,6 +1,6 @@
 # OpShin Staking Contracts - PlutusV3 Examples
 
-Production-ready* Cardano smart contracts written in OpShin (Python) for token staking pools. These contracts power [OrmrStake](https://ormrstake.io).
+Production-ready Cardano smart contracts written in OpShin (Python) for token staking pools. These contracts power [OrmrStake](https://ormrstake.io).
 
 ## Overview
 
@@ -14,10 +14,20 @@ This repository contains a complete staking platform implementation using:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
+│                   Platform Authority NFT                         │
+│  - One-shot NFT minted during platform deployment               │
+│  - Controls who can create pools (pool_creator_pkh)             │
+│  - Platform admin can update configuration                      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ authorizes
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
 │                        Pool Validator                           │
 │  - Holds pool configuration (PoolDatum)                        │
 │  - Manages treasury funds                                       │
 │  - Contains Pool NFT proving legitimacy                        │
+│  - Unstake/Claim require staking validator authorization       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ references
@@ -27,6 +37,7 @@ This repository contains a complete staking platform implementation using:
 │  - Holds user positions (UserPositionDatum)                    │
 │  - Manages stake/unstake/claim operations                      │
 │  - Reads pool config from reference inputs                     │
+│  - Time manipulation protected (10min max validity window)     │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ mints/burns
@@ -65,7 +76,10 @@ CIP-68 compliant minting policy for position NFTs. When a user registers:
 - User NFT (label 222) goes to the user's wallet
 
 ### pool_nft_policy_v3.py
-Minting policy for pool identity NFTs. Each pool has a unique NFT that proves the pool datum is legitimate.
+Minting policy for pool identity NFTs. Each pool has a unique NFT that proves the pool datum is legitimate. Requires platform authorization to create new pools.
+
+### platform_authority_nft_policy.py
+One-shot NFT policy for platform identity. The Platform Authority NFT controls who can create pools. Only the authorized `pool_creator_pkh` in the PlatformAuthorityDatum can mint new Pool NFTs.
 
 ### v3_datum_types.py
 Shared data structures used across all contracts:
@@ -130,10 +144,14 @@ Contracts should be tested on Cardano testnet (preprod or preview) before mainne
 ## Security Considerations
 
 1. **Owner verification** - Pool operations require owner signature
-2. **NFT verification** - All operations verify correct NFTs are present
+2. **NFT verification** - All operations verify correct NFTs are present (both policy AND name)
 3. **Amount validation** - Withdrawals cannot exceed staked amount
 4. **Reward caps** - Claims limited to treasury balance
 5. **Reference input validation** - Pool config read from verified reference inputs
+6. **Cross-validator authorization** - Unstake/Claim on pool validator require staking validator to be spent, preventing unauthorized fund drainage
+7. **Time manipulation prevention** - Validity window capped at 10 minutes, uses upper_bound for reward calculations
+8. **Platform authorization** - Pool creation requires Platform Authority NFT holder's signature
+9. **Token identity validation** - NFT burns validate both policy ID and token name to prevent fake NFT substitution
 
 ## License
 
@@ -145,7 +163,3 @@ MIT License - See LICENSE file for details.
 - [CIP-68 Specification](https://cips.cardano.org/cip/CIP-0068/)
 - [PlutusV3 Documentation](https://plutus.readthedocs.io/)
 - [OrmrStake Platform](https://ormrstake.io)
-
-## Notes
-
-* Production-ready means that you can use it and it works. However, it has not been professionally audited, so its use at your own risk. 

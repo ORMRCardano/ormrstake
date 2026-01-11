@@ -7,11 +7,33 @@ Token name = sha256(tx_id || output_index) ensures uniqueness.
 
 IMPORTANT: No validator hashes are baked into this contract.
 The pool_validator_hash is passed in the Mint redeemer.
+Platform authorization is verified via reference input containing Platform Authority NFT.
 
 Compile: opshin build pool_nft_policy_v3.py
 """
 # Use PlutusV3 ledger types (TxId is bytes directly, not a wrapper)
 from opshin.ledger.api_v3 import *
+
+
+# =============================================================================
+# PLATFORM AUTHORITY DATUM (for pool creation authorization)
+# =============================================================================
+
+@dataclass
+class PlatformAuthorityDatum(PlutusData):
+    """
+    Platform configuration - stored in the Platform Authority UTxO.
+    Must match platform_authority_nft_policy.py EXACTLY.
+    """
+    CONSTR_ID = 0
+
+    # Authorization
+    pool_creator_pkh: bytes         # 28 bytes - PKH authorized to create pools
+    platform_admin_pkh: bytes       # 28 bytes - PKH that can update this config
+
+    # Platform identity (for verification)
+    platform_nft_policy: bytes      # 28 bytes - Platform authority NFT policy
+    platform_nft_name: bytes        # 32 bytes - Platform authority NFT name
 
 
 # =============================================================================
@@ -58,10 +80,12 @@ class PoolDatum(PlutusData):
 
 @dataclass
 class Mint(PlutusData):
-    """Mint a new pool NFT."""
+    """Mint a new pool NFT. Requires platform authorization."""
     CONSTR_ID = 0
-    output_index: int           # Which output receives the NFT
-    pool_validator_hash: bytes  # Hash of the pool validator (28 bytes)
+    output_index: int                   # Which output receives the NFT
+    pool_validator_hash: bytes          # Hash of the pool validator (28 bytes)
+    platform_authority_nft_policy: bytes  # Platform Authority NFT policy (28 bytes)
+    platform_authority_nft_name: bytes    # Platform Authority NFT name (32 bytes)
 
 
 @dataclass
@@ -84,6 +108,47 @@ def has_token(v: Value, policy: bytes, name: bytes, qty: int) -> bool:
         if name in tokens.keys():
             return tokens[name] == qty
     return False
+
+
+def has_nft(v: Value, policy: bytes, name: bytes) -> bool:
+    """Check if value contains the NFT (qty >= 1)."""
+    if policy in v.keys():
+        tokens = v[policy]
+        if name in tokens.keys():
+            return tokens[name] >= 1
+    return False
+
+
+def signed_by(tx: TxInfo, pkh: bytes) -> bool:
+    """Check if transaction is signed by PKH."""
+    for s in tx.signatories:
+        if s == pkh:
+            return True
+    return False
+
+
+def find_platform_authority(tx: TxInfo, authority_nft_policy: bytes, authority_nft_name: bytes) -> PlatformAuthorityDatum:
+    """
+    Find Platform Authority from reference inputs by NFT presence.
+    Returns the PlatformAuthorityDatum containing pool_creator_pkh.
+    """
+    for ref in tx.reference_inputs:
+        if has_nft(ref.resolved.value, authority_nft_policy, authority_nft_name):
+            ref_datum = ref.resolved.datum
+            if isinstance(ref_datum, SomeOutputDatum):
+                authority: PlatformAuthorityDatum = ref_datum.datum
+                # Verify self-reference matches
+                assert authority.platform_nft_policy == authority_nft_policy, "Authority policy mismatch"
+                assert authority.platform_nft_name == authority_nft_name, "Authority name mismatch"
+                return authority
+    assert False, "Platform Authority not found in reference inputs"
+    # Dummy return for type checker
+    return PlatformAuthorityDatum(
+        pool_creator_pkh=b"",
+        platform_admin_pkh=b"",
+        platform_nft_policy=b"",
+        platform_nft_name=b""
+    )
 
 
 def output_to_validator(out: TxOut, script_hash: bytes) -> bool:
@@ -138,8 +203,10 @@ def validator(ctx: ScriptContext) -> None:
 
     No validator hashes are baked in.
     The pool_validator_hash comes from the Mint redeemer.
+    Platform authorization is verified via Platform Authority reference input.
 
     MINT: Creates exactly 1 NFT, must go to pool validator with valid datum.
+          Requires platform authorization (pool_creator_pkh must sign).
     BURN: Allows burning (for pool closure).
     """
     tx: TxInfo = ctx.transaction
@@ -158,6 +225,20 @@ def validator(ctx: ScriptContext) -> None:
     if isinstance(redeemer, Mint):
         # Validate pool_validator_hash is proper length
         assert len(redeemer.pool_validator_hash) == 28, "Invalid pool_validator_hash length"
+
+        # PLATFORM AUTHORIZATION CHECK
+        # Find Platform Authority from reference inputs and verify authorized signer
+        assert len(redeemer.platform_authority_nft_policy) == 28, "Invalid authority policy length"
+        assert len(redeemer.platform_authority_nft_name) == 32, "Invalid authority name length"
+
+        authority = find_platform_authority(
+            tx,
+            redeemer.platform_authority_nft_policy,
+            redeemer.platform_authority_nft_name
+        )
+
+        # Verify the pool_creator_pkh from the Platform Authority signed this tx
+        assert signed_by(tx, authority.pool_creator_pkh), "Platform pool creator must sign"
 
         # Compute unique token name from first input tx_id
         # This ensures one-shot minting (input can only be spent once)
