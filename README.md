@@ -153,6 +153,10 @@ Contracts should be tested on Cardano testnet (preprod or preview) before mainne
 8. **Platform authorization** - Pool creation requires Platform Authority NFT holder's signature
 9. **Token identity validation** - NFT burns validate both policy ID and token name to prevent fake NFT substitution
 
+## Audit
+
+These contracts have not been "professionally" audited by any smart contract auditing firm. However, they have been "Claudited" (audited by Claude.ai) for known smart contract issues and Cardano specific issues. You can read more about what was found and fixed in the CLAUDIT.md file. 
+
 ## License
 
 MIT License - See LICENSE file for details.
