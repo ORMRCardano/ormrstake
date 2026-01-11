@@ -1,8 +1,11 @@
 # Security Audit Report
 
 **Audit Date:** January 11, 2026
+
 **Auditor:** Claude (Anthropic AI)
+
 **Contracts:** OpShin Staking Platform V3
+
 **Status:** All issues remediated
 
 ---
