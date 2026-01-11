@@ -1,6 +1,7 @@
 # OpShin Staking Contracts - PlutusV3 Examples
 
-Production-ready Cardano smart contracts written in OpShin (Python) for token staking pools. These contracts power [OrmrStake](https://ormrstake.io).
+Cardano smart contracts written in OpShin (Python) for native asset staking pools. 
+These contracts power [OrmrStake](https://ormrstake.io).
 
 ## Overview
 
