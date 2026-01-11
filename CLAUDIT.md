@@ -277,16 +277,4 @@ The contracts are considered secure for deployment after these fixes.
 
 ---
 
-## Deployed Contract Hashes (Preprod)
-
-| Contract | Script Hash |
-|----------|-------------|
-| pool_validator | `26846b17266a2a904c54b31559df3fff3e505f28eca9804b01016fee` |
-| staking_validator | `d071403d030f35967f3fc2816b73b2d502b0b0606bd3273eb66ac752` |
-| pool_nft_policy | `380d94c171d6810d101e12a89916615596f01e2c71d1e10e87c85c88` |
-| position_nft_policy | `709ce468c3eb359b3ae8791e8c1731078f24ca16754d6a3d933010b1` |
-| platform_authority_nft_policy | `5215c677a8976dd72700083947791f8c376ca6c150a0694a47312844` |
-
----
-
 *This audit was performed by Claude (Anthropic AI) as an automated security review. While comprehensive, it should be supplemented with manual review and formal verification for production deployments.*
